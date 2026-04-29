@@ -1,176 +1,129 @@
 import sqlite3
 import uuid
 import time
-from fastapi import FastAPI, HTTPException, Request
+import os
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 
 # Import the NUSTSec Mail Cannon
 from mailer import send_phishing_email
 
-# Initialize the API
-app = FastAPI(title="NUSTSec PhishGuard API", description="Backend Engine for Localized Threat Simulation")
+app = FastAPI(title="NUSTSec PhishGuard API")
 
-# Initialize Rate Limiter (Tracks users by their IP address)
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# --- 1. ENABLE CORS ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.get("/")
-async def root():
-    return {
-        "status": "online", 
-        "service": "NUSTSec PhishGuard API", 
-        "docs_url": "/docs"
-    }
-
-# --- Security Helper ---
-def is_valid_uuid(val: str) -> bool:
-    """Security Layer: Validate token format to prevent injection/malformed requests."""
-    try:
-        uuid.UUID(str(val))
-        return True
-    except ValueError:
-        return False
-
-# 1. Data Model definition... Rules
 class CampaignCreate(BaseModel):
     name: str
-    template_name: str  # e.g., 'zesa_token_error', 'mukuru_verification'
+    template_name: str
     recipients: List[str]
 
-# 2. Create Campaign Route... Engine
+# --- 2. STATS API (For the Dashboard) ---
+@app.get("/api/stats")
+async def get_stats():
+    conn = sqlite3.connect("../phishguard.db")
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT COUNT(*) FROM campaigns")
+    total_campaigns = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM recipients")
+    total_sent = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM recipients WHERE status IN ('clicked','compromised')")
+    total_clicked = cursor.fetchone()[0]
+
+    cursor.execute("""
+        SELECT c.id, c.name, c.template_name, c.created_at,
+               COUNT(r.id) as total_sent,
+               SUM(CASE WHEN r.status IN ('clicked','compromised') THEN 1 ELSE 0 END) as total_clicked,
+               SUM(CASE WHEN r.status = 'compromised' THEN 1 ELSE 0 END) as total_compromised
+        FROM campaigns c LEFT JOIN recipients r ON r.campaign_id = c.id
+        GROUP BY c.id ORDER BY c.created_at DESC LIMIT 20
+    """)
+    campaigns = [{"id":r[0],"name":r[1],"template_name":r[2],"created_at":r[3],
+                  "total_sent":r[4],"total_clicked":r[5],"total_compromised":r[6]} for r in cursor.fetchall()]
+    conn.close()
+    return {"total_campaigns": total_campaigns, "total_sent": total_sent,
+            "total_clicked": total_clicked, "campaigns": campaigns}
+
+# --- 3. CREATE CAMPAIGN ---
 @app.post("/api/campaigns/create")
 async def create_campaign(campaign: CampaignCreate):
     try:
-        # Connect to our local database
-        conn = sqlite3.connect("phishguard.db")
+        conn = sqlite3.connect("../phishguard.db")
         cursor = conn.cursor()
-
-        # Step A: Insert the Campaign details
-        cursor.execute(
-            "INSERT INTO campaigns (name, template_name) VALUES (?, ?)",
-            (campaign.name, campaign.template_name)
-        )
-        # Grab the ID of the campaign we just created
+        cursor.execute("INSERT INTO campaigns (name, template_name) VALUES (?, ?)", (campaign.name, campaign.template_name))
         campaign_id = cursor.lastrowid
 
-        # Step B: Generate secure UUIDs, save to DB, fire emails
-        inserted_count = 0
         for email in campaign.recipients:
-            # Generate a random, secure UUID for the tracking link
             target_uuid = str(uuid.uuid4())
-            
-            # Save the target securely in the database
-            cursor.execute(
-                "INSERT INTO recipients (email, campaign_id, token) VALUES (?, ?, ?)",
-                (email, campaign_id, target_uuid)
-            )
-            inserted_count += 1
-            
-            # --- FIRE THE CANNON ---
+            cursor.execute("INSERT INTO recipients (email, campaign_id, token) VALUES (?, ?, ?)", (email, campaign_id, target_uuid))
             send_phishing_email(email, campaign.template_name, target_uuid)
-            
-            # --- RATE LIMIT BYPASS ---
-            # Pause for 1.5 seconds so Mailtrap doesn't block us for spamming
             time.sleep(1.5)
 
-        # Save the changes and close the connection
         conn.commit()
         conn.close()
-
-        # Return a success message to frontend
-        return {
-            "status": "success", 
-            "message": f"Campaign '{campaign.name}' initiated. Generated and dispatched {inserted_count} payloads."
-        }
-        
+        return {"status": "success", "message": f"Dispatched {len(campaign.recipients)} payloads."}
     except Exception as e:
-        # If anything fails, tell the frontend exactly what went wrong
-        raise HTTPException(status_code=500, detail=f"System error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-# 3. The Infrastructure Tracking Route... The Trap
+# --- 4. TRACKING & REDIRECT ---
 @app.get("/click/{token}")
-async def track_click(token: str, request: Request):
-    # 1. Security Check: Validate UUID
-    if not is_valid_uuid(token):
-        raise HTTPException(status_code=400, detail="Invalid token format.")
-
-    # 2. Extract Client IP
-    client_ip = request.client.host if request.client else "Unknown"
-
+async def track_click(token: str):
     try:
-        conn = sqlite3.connect("phishguard.db")
+        # Use the base directory to find the DB in the root folder
+        BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        db_path = os.path.join(BASE_DIR, "phishguard.db")
+        
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # 3. Verify token exists in database to prevent rogue entries
-        cursor.execute("SELECT id FROM recipients WHERE token = ?", (token,))
-        if not cursor.fetchone():
-            conn.close()
-            raise HTTPException(status_code=404, detail="Token not found.")
+        # 1. Update the status to 'clicked'
+        cursor.execute("UPDATE recipients SET status = 'clicked' WHERE token = ?", (token,))
+        cursor.execute("INSERT INTO tracking_events (token) VALUES (?)", (token,))
 
-        # 4. Update target status to 'clicked' (only if currently pending to avoid overriding 'compromised')
-        cursor.execute(
-            "UPDATE recipients SET status = 'clicked' WHERE token = ? AND status = 'pending'",
-            (token,)
-        )
-
-        # 5. Log the "click" event with IP
-        cursor.execute(
-            "INSERT INTO tracking_events (token, event_type, ip_address) VALUES (?, ?, ?)",
-            (token, "click", client_ip)
-        )
-
+        # 2. Find out which template was used to decide the redirect page
+        cursor.execute("""
+            SELECT c.template_name 
+            FROM campaigns c 
+            JOIN recipients r ON r.campaign_id = c.id 
+            WHERE r.token = ?
+        """, (token,))
+        
+        row = cursor.fetchone()
+        template = row[0] if row else 'mukuru_verification'
+        
         conn.commit()
         conn.close()
 
-        # 6. Safe Redirect
-        # NOTE: Replace with the actual frontend phishing landing page URL
-        return RedirectResponse(url="https://www.google.com")
+        # 3. Determine the redirect path
+        page = 'trap-mukuru.html' if template == 'mukuru_verification' else 'trap-zesa.html'
+        
+        # NOTE: If your HTML files are NOT inside a 'frontend' folder, 
+        # remove 'frontend/' from the line below.
+        redirect_url = f"http://localhost:5500/frontend/{page}?token={token}"
+        
+        return RedirectResponse(url=redirect_url)
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Tracking error: {str(e)}")
-
-# 4. The Compromised Route... The Final Payload
+        print(f"Error in track_click: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+    
+# --- 5. COMPROMISED ENDPOINT ---
 @app.post("/compromised/{token}")
-@limiter.limit("5/minute")  # <-- SECURITY: Max 5 requests per minute per IP
-async def track_compromised(token: str, request: Request):
-    # 1. Security Check: Validate UUID
-    if not is_valid_uuid(token):
-        raise HTTPException(status_code=400, detail="Invalid token format.")
-
-    client_ip = request.client.host if request.client else "Unknown"
-
-    try:
-        conn = sqlite3.connect("phishguard.db")
-        cursor = conn.cursor()
-
-        # 2. Verify token exists
-        cursor.execute("SELECT id FROM recipients WHERE token = ?", (token,))
-        if not cursor.fetchone():
-            conn.close()
-            raise HTTPException(status_code=404, detail="Token not found.")
-
-        # 3. Update target status to 'compromised'
-        cursor.execute(
-            "UPDATE recipients SET status = 'compromised' WHERE token = ?",
-            (token,)
-        )
-
-        # 4. Log the "compromised" event
-        cursor.execute(
-            "INSERT INTO tracking_events (token, event_type, ip_address) VALUES (?, ?, ?)",
-            (token, "compromised", client_ip)
-        )
-
-        conn.commit()
-        conn.close()
-
-        return {"status": "success", "message": "Compromised event logged securely."}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Tracking error: {str(e)}")
+async def mark_compromised(token: str):
+    conn = sqlite3.connect("../phishguard.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE recipients SET status='compromised' WHERE token=?", (token,))
+    conn.commit()
+    conn.close()
+    return {"status": "logged"}
