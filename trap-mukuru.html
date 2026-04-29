@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Mukuru — Secure Sign In</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: #f5f5f5; min-height: 100vh; display: flex; flex-direction: column; }
+
+        /* Branding Colors */
+        .top-nav { background: #ff6600; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; }
+        .nav-logo { display: flex; align-items: center; gap: 10px; color: white; font-size: 20px; font-weight: 700; }
+        .nav-links { display: flex; gap: 24px; }
+        .nav-links a { color: rgba(255,255,255,0.85); font-size: 13px; text-decoration: none; }
+        .secondary-nav { background: white; border-bottom: 1px solid #e5e7eb; padding: 0 24px; height: 42px; display: flex; align-items: center; }
+        .secondary-nav a { font-size: 12.5px; color: #374151; text-decoration: none; margin-right: 20px; }
+        .secondary-nav a.active { border-bottom: 2px solid #ff6600; color: #ff6600; font-weight: 500; height: 42px; display: flex; align-items: center; }
+
+        /* Main Card */
+        .page-body { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 20px; }
+        .login-card { background: white; width: 100%; max-width: 420px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; }
+        .login-header { background: #ff6600; color: white; padding: 24px 28px; }
+        .login-header h1 { font-size: 18px; }
+        .login-body { padding: 28px; }
+
+        /* Lure Components */
+        .alert-box { background: #fff8f0; border: 1px solid #fdba74; border-left: 4px solid #ff6600; border-radius: 4px; padding: 12px; font-size: 12.5px; color: #92400e; margin-bottom: 20px; }
+        .form-group { margin-bottom: 18px; }
+        label { display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 6px; }
+        
+        .phone-wrap { display: flex; gap: 8px; }
+        .country-code { width: 85px; padding: 11px; border: 1px solid #d1d5db; border-radius: 5px; background: #f9fafb; font-size: 14px; }
+        
+        input { width: 100%; padding: 11px; border: 1px solid #d1d5db; border-radius: 5px; font-size: 14px; outline: none; }
+        input:focus { border-color: #ff6600; }
+
+        .submit-btn { width: 100%; padding: 14px; background: #ff6600; color: white; border: none; border-radius: 5px; font-size: 15px; font-weight: 600; cursor: pointer; }
+        .submit-btn:disabled { background: #ffaa80; cursor: not-allowed; }
+
+        /* Spinner for visual response */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 8px; }
+
+        .trust-badges { display: flex; justify-content: center; gap: 15px; margin-top: 25px; font-size: 11px; color: #9ca3af; border-top: 1px solid #eee; pt: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="top-nav">
+  <div class="nav-logo">mukuru</div>
+  <div class="nav-links">
+    <a href="#">Send Money</a><a href="#">Receive Money</a><a href="#">Support</a>
+  </div>
+</div>
+
+<div class="secondary-nav">
+  <a href="#" class="active">Sign In</a><a href="#">Register</a><a href="#">Help</a>
+</div>
+
+<div class="page-body">
+  <div class="login-card">
+    <div class="login-header">
+      <h1>Verify Your Account</h1>
+      <p>Action required — transfer flagged</p>
+    </div>
+    <div class="login-body">
+      <div class="alert-box">
+        ⚠️ Transfer of <strong>USD 120.00</strong> to <em>Harare</em> is <strong>suspended</strong>. Verify identity to release funds.
+      </div>
+
+      <form id="phish-form" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label>Mobile Number</label>
+          <div class="phone-wrap">
+            <div class="country-code">🇿🇼 +263</div>
+            <input type="tel" placeholder="77 123 4567" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Security PIN</label>
+          <input type="password" placeholder="Enter your 4–6 digit PIN" required>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submit-btn">Verify & Release Transfer</button>
+      </form>
+
+      <div class="trust-badges">
+        <span>🔒 SSL Secured</span><span>🏦 RBZ Licensed</span><span>✅ Verified</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function handleLogin(event) {
+    // 1. Prevent the page from refreshing/reloading
+    event.preventDefault();
+
+    const btn = document.getElementById('submit-btn');
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+
+    // Visual feedback
+    btn.innerHTML = '<span class="spinner"></span> Processing...';
+    btn.disabled = true;
+
+    if (!token) {
+        console.error("No token found in URL.");
+        alert("Session error. Please use the link from your email.");
+        btn.innerHTML = "Verify & Release Transfer";
+        btn.disabled = false;
+        return;
+    }
+
+    try {
+        // 2. Report the "Compromise" to your FastAPI backend
+        const response = await fetch(`http://127.0.0.1:8000/api/compromised/${token}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+            console.log("Success: Target marked as compromised.");
+            // 3. Redirect to your education page
+            window.location.href = "education.html";
+        } else {
+            throw new Error("Backend error");
+        }
+    } catch (error) {
+        console.error("Network Error:", error);
+        alert("Connection to server failed. Ensure FastAPI is running on port 8000.");
+        btn.innerHTML = "Verify & Release Transfer";
+        btn.disabled = false;
+    }
+}
+</script>
+
+</body>
+</html>

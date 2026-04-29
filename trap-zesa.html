@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ZESA — Prepaid Token Retrieval</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: #f0f4ff;
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+}
+
+.top-nav {
+  background: #0033a0;
+  padding: 0 24px; height: 58px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.nav-logo {
+  display: flex; align-items: center; gap: 12px;
+  color: white;
+}
+
+.logo-badge {
+  background: white; color: #0033a0;
+  font-size: 16px; font-weight: 800;
+  padding: 4px 10px; border-radius: 4px;
+  letter-spacing: 1px;
+}
+
+.logo-sub { font-size: 11px; color: rgba(255,255,255,0.7); margin-top: 2px; }
+
+.nav-links { display: flex; gap: 20px; }
+.nav-links a { color: rgba(255,255,255,0.8); font-size: 13px; text-decoration: none; }
+
+.banner {
+  background: #fef3c7;
+  border-bottom: 1px solid #fde68a;
+  padding: 10px 24px;
+  text-align: center;
+  font-size: 12.5px;
+  color: #92400e;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+
+.page-body {
+  flex: 1; display: flex;
+  align-items: flex-start; justify-content: center;
+  padding: 40px 20px;
+  gap: 24px;
+}
+
+.main-card {
+  background: white; border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.09);
+  overflow: hidden; width: 100%; max-width: 480px;
+}
+
+.card-header {
+  background: #0033a0; padding: 20px 24px;
+  display: flex; align-items: center; gap: 14px;
+}
+
+.header-icon {
+  width: 44px; height: 44px; background: rgba(255,255,255,0.15);
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 22px; flex-shrink: 0;
+}
+
+.card-header h2 { color: white; font-size: 17px; font-weight: 600; }
+.card-header p { color: rgba(255,255,255,0.75); font-size: 12.5px; margin-top: 3px; }
+
+.card-body { padding: 24px; }
+
+.status-box {
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-left: 4px solid #f59e0b;
+  border-radius: 5px;
+  padding: 12px 14px;
+  margin-bottom: 22px;
+  font-size: 13px; color: #78350f;
+  line-height: 1.5;
+}
+
+.info-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid #f3f4f6;
+  font-size: 13px;
+}
+
+.info-row:last-of-type { border-bottom: none; margin-bottom: 20px; }
+.info-label { color: #6b7280; }
+.info-value { font-weight: 600; color: #111827; }
+.info-value.red { color: #dc2626; }
+
+.divider { height: 1px; background: #f3f4f6; margin: 18px 0; }
+
+.form-group { margin-bottom: 18px; }
+
+label {
+  display: block;
+  font-size: 13px; font-weight: 500; color: #374151;
+  margin-bottom: 6px;
+}
+
+input[type="text"], input[type="tel"], input[type="password"] {
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid #d1d5db; border-radius: 5px;
+  font-family: 'Inter', sans-serif; font-size: 14px; color: #111827;
+  outline: none; transition: border-color 0.15s;
+}
+
+input:focus { border-color: #0033a0; box-shadow: 0 0 0 3px rgba(0,51,160,0.1); }
+input::placeholder { color: #9ca3af; }
+
+.form-hint { font-size: 11.5px; color: #9ca3af; margin-top: 5px; }
+
+.submit-btn {
+  width: 100%; padding: 13px;
+  background: #0033a0; color: white;
+  border: none; border-radius: 5px;
+  font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+
+.submit-btn:hover { background: #002080; }
+
+.security-note {
+  text-align: center; margin-top: 16px;
+  font-size: 11.5px; color: #9ca3af;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+
+/* Sidebar info card */
+.info-card {
+  background: white; border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  padding: 20px; width: 240px; flex-shrink: 0;
+}
+
+.info-card h3 { font-size: 13.5px; font-weight: 600; color: #111827; margin-bottom: 14px; }
+.info-card li {
+  font-size: 12.5px; color: #6b7280; line-height: 1.6;
+  padding: 6px 0; border-bottom: 1px solid #f3f4f6;
+  list-style: none; display: flex; gap: 8px;
+}
+.info-card li:last-child { border-bottom: none; }
+
+.page-footer {
+  background: #1e3a8a; color: rgba(255,255,255,0.55);
+  padding: 16px 24px; font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 17px; height: 17px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: white; border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+</style>
+</head>
+<body>
+
+<div class="top-nav">
+  <div class="nav-logo">
+    <div class="logo-badge">ZESA</div>
+    <div>
+      <div style="font-size:13px; font-weight:600; color:white;">Zimbabwe Electricity Supply Authority</div>
+      <div class="logo-sub">Prepaid Customer Portal</div>
+    </div>
+  </div>
+  <div class="nav-links">
+    <a href="#">Home</a>
+    <a href="#">Buy Tokens</a>
+    <a href="#">Support</a>
+  </div>
+</div>
+
+<div class="banner">
+  ⚠️ System maintenance in progress. Token sync issues may affect recent purchases. Use this portal to retrieve your token manually.
+</div>
+
+<div class="page-body">
+  <div class="main-card">
+    <div class="card-header">
+      <div class="header-icon">⚡</div>
+      <div>
+        <h2>Token Retrieval — Action Required</h2>
+        <p>Your recently purchased token failed to sync with your meter</p>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <div class="status-box">
+        Your prepaid electricity token purchase could not be delivered to your smart meter. Please verify your account details below to manually retrieve your <strong>20-digit token code</strong>.
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">Purchase Date</span>
+        <span class="info-value" id="purchase-date">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Amount</span>
+        <span class="info-value">USD 10.00</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Token Status</span>
+        <span class="info-value red">⚠ Sync Failed</span>
+      </div>
+
+      <div class="divider"></div>
+
+      <form id="zesa-form" onsubmit="handleSubmit(event)">
+        <div class="form-group">
+          <label for="meter">Meter Number</label>
+          <input type="text" id="meter" placeholder="e.g. 15 2345 6789 01" maxlength="16"/>
+          <div class="form-hint">Found on your ZESA meter or utility bill</div>
+        </div>
+
+        <div class="form-group">
+          <label for="id-number">National ID Number</label>
+          <input type="text" id="id-number" placeholder="e.g. 63-012345 A 26"/>
+          <div class="form-hint">As on your Zimbabwe National ID card</div>
+        </div>
+
+        <div class="form-group">
+          <label for="phone-zesa">Phone Number</label>
+          <input type="tel" id="phone-zesa" placeholder="+263 77 123 4567"/>
+          <div class="form-hint">Linked to your ZESA account</div>
+        </div>
+
+        <button type="submit" class="submit-btn" id="zesa-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Retrieve My Token
+        </button>
+      </form>
+
+      <div class="security-note">
+        🔒 Your data is encrypted and transmitted securely
+      </div>
+    </div>
+  </div>
+
+  <div class="info-card">
+    <h3>Quick Help</h3>
+    <ul>
+      <li><span>📞</span> ZESA Hotline: 08006110</li>
+      <li><span>🌐</span> Portal Hours: 24/7</li>
+      <li><span>📧</span> support@zesa.co.zw</li>
+      <li><span>🏢</span> Julius Nyerere Way, Harare</li>
+      <li><span>⚡</span> Token length: 20 digits</li>
+      <li><span>⏱</span> Retrieval takes 2 minutes</li>
+    </ul>
+  </div>
+</div>
+
+<div class="page-footer">
+  © 2026 Zimbabwe Electricity Supply Authority (ZESA) Holdings. All rights reserved.
+</div>
+
+<script>
+// Set realistic date
+document.getElementById('purchase-date').textContent = new Date(Date.now() - 86400000).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+
+function handleSubmit(e) {
+  e.preventDefault();
+  const meter = document.getElementById('meter').value.trim();
+  const id = document.getElementById('id-number').value.trim();
+  const phone = document.getElementById('phone-zesa').value.trim();
+
+  if (!meter || !id || !phone) {
+    alert('Please fill in all fields to retrieve your token.');
+    return;
+  }
+
+  const btn = document.getElementById('zesa-btn');
+  btn.innerHTML = '<span class="spinner"></span> Verifying...';
+  btn.disabled = true;
+
+  // Report compromised status to backend
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token') || '';
+  if (token) {
+    fetch(`/compromised/${token}`, { method: 'POST' }).catch(() => {});
+  }
+
+  setTimeout(() => {
+    window.location.href = `lesson.html?template=zesa`;
+  }, 2000);
+}
+</script>
+</body>
+</html>
